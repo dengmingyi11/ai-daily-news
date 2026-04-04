@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """
 AI 行业日报自动生成脚本
-通过搜索引擎获取最新 AI 行业动态并生成日报，推送到邮箱
+通过搜索引擎获取最新 AI 行业动态并生成日报，推送到飞书
 """
 
 import os
-import smtplib
-import ssl
+import json
 from datetime import datetime
 from pathlib import Path
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
 
 # 配置
 SEARCH_QUERIES = [
@@ -121,73 +117,47 @@ def generate_report() -> tuple:
     return report, date_str
 
 
-def send_email(report: str, date_str: str):
-    """发送邮件"""
-    smtp_server = os.environ.get('EMAIL_SMTP_SERVER', 'smtp.163.com')
-    smtp_port = int(os.environ.get('EMAIL_SMTP_PORT', '465'))
-    username = os.environ.get('EMAIL_USERNAME')
-    password = os.environ.get('EMAIL_PASSWORD')
-    to_email = os.environ.get('EMAIL_TO')
+def send_feishu(report: str, date_str: str):
+    """发送飞书推送"""
+    import requests
     
-    if not all([username, password, to_email]):
-        print("⚠️ 邮件配置不完整，跳过发送")
-        print(f"   EMAIL_USERNAME: {'已配置' if username else '未配置'}")
-        print(f"   EMAIL_PASSWORD: {'已配置' if password else '未配置'}")
-        print(f"   EMAIL_TO: {'已配置' if to_email else '未配置'}")
+    webhook_url = os.environ.get('FEISHU_WEBHOOK_URL')
+    
+    if not webhook_url:
+        print("⚠️ 飞书 Webhook URL 未配置，跳过推送")
         return False
     
     try:
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = f'🤖 AI 行业日报 - {date_str}'
-        msg['From'] = formataddr(('AI日报', username))
-        msg['To'] = to_email
+        # 构建飞书消息
+        title = f"🤖 AI 行业日报 - {date_str}"
         
-        # 纯文本版本
-        text_content = report.replace('#', '').replace('*', '').replace('>', '')
-        msg.attach(MIMEText(text_content, 'plain', 'utf-8'))
+        # 飞书消息格式（支持 markdown）
+        # 飞书 text 类型支持部分 markdown 语法
+        content = f"{title}\n\n{report}"
         
-        # HTML 版本
-        html = report.replace('\n', '<br>')
-        html = html.replace('# 🤖 AI 行业日报', '<h1>🤖 AI 行业日报</h1>')
-        html = html.replace('## ', '<h2>')
-        html = html.replace('### ', '<h3>')
-        html = html.replace('> ', '<blockquote>')
-        html = html.replace('---', '<hr>')
-        html = html.replace('🔗 ', '<a href="')
-        html = html.replace(') [查看详情]', '">查看详情</a>')
+        data = {
+            "msg_type": "text",
+            "content": {
+                "text": content
+            }
+        }
         
-        html_content = f"""
-        <html>
-        <head>
-            <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }}
-                h1 {{ color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 10px; }}
-                h2 {{ color: #1f2937; margin-top: 30px; }}
-                h3 {{ color: #374151; }}
-                blockquote {{ background: #f3f4f6; padding: 15px; border-left: 4px solid #2563eb; margin: 10px 0; }}
-                a {{ color: #2563eb; }}
-                table {{ border-collapse: collapse; width: 100%; }}
-                th, td {{ border: 1px solid #e5e7eb; padding: 10px; }}
-            </style>
-        </head>
-        <body>
-            {html}
-        </body>
-        </html>
-        """
-        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+        headers = {
+            'Content-Type': 'application/json'
+        }
         
-        # 发送
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(smtp_server, smtp_port, context=context) as server:
-            server.login(username, password)
-            server.send_message(msg)
+        response = requests.post(webhook_url, json=data, headers=headers, timeout=10)
+        result = response.json()
         
-        print(f"✅ 邮件已发送至 {to_email}")
-        return True
+        if response.status_code == 200 and result.get('code') == 0:
+            print(f"✅ 飞书推送成功！")
+            return True
+        else:
+            print(f"❌ 飞书推送失败: {result.get('msg', '未知错误')}")
+            return False
         
     except Exception as e:
-        print(f"❌ 邮件发送失败: {e}")
+        print(f"❌ 飞书推送失败: {e}")
         return False
 
 
@@ -206,8 +176,8 @@ def main():
     
     print(f"✅ 日报已生成: {report_file}")
     
-    # 发送邮件
-    send_email(report, date_str)
+    # 发送飞书推送
+    send_feishu(report, date_str)
     
     print("🎉 完成！")
 
