@@ -1,0 +1,42 @@
+name: AI Daily News
+
+on:
+  schedule:
+    # 每天北京时间 9:30 执行 (UTC 1:30)
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Generate AI Daily Report
+        env:
+          EMAIL_SMTP_SERVER: ${{ secrets.EMAIL_SMTP_SERVER }}
+          EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
+          EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python scripts/generate_report.py
+
+      - name: Commit report
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add reports/
+          git diff --quiet && git diff --staged --quiet || git commit -m "📰 AI日报 - $(date '+%Y-%m-%d')"
+          git push
