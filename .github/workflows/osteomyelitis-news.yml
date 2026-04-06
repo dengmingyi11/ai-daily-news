@@ -2,8 +2,8 @@ name: Osteomyelitis Medical News
 
 on:
   schedule:
-    # 每天北京时间 10:00 执行 (UTC 2:00)
-    - cron: '0 2 * * *'
+    # 每天北京时间 16:18 执行 (UTC 08:18)
+    - cron: '18 8 * * *'
   workflow_dispatch:
 
 jobs:
